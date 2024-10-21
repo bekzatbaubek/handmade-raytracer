@@ -272,15 +272,23 @@ int APIENTRY WinMain(HINSTANCE Instance, HINSTANCE PreviousInstance,
 
     if (RegisterClassA(&wc)) {
 
-        HWND Window = CreateWindowA(wc.lpszClassName, (LPCSTR) "Handmade Hero",
-                                    WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-                                    CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-                                    CW_USEDEFAULT, 0, 0, Instance, 0);
+        RECT Rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
+        DWORD Style = WS_OVERLAPPEDWINDOW | WS_VISIBLE;
+        BOOL Menu = false;
+
+        AdjustWindowRect(&Rect, Style, Menu);
+
+        HWND Window = CreateWindowA(wc.lpszClassName,
+                                    (LPCSTR) "Handmade Raycaster",
+                                    Style,
+                                    100,
+                                    100,
+                                    Rect.right - Rect.left,
+                                    Rect.bottom - Rect.top,
+                                    0, 0, Instance, 0);
 
         if (Window) {
             HDC DeviceContext = GetDC(Window);
-
-            // SetWindowPos(Window, 0, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0);
 
             // Render Raytracer
 
