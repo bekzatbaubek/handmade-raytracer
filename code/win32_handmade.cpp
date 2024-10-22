@@ -1,5 +1,6 @@
 #include <cmath>
 #include <cstdint>
+#include <iostream>
 #include <stdint.h>
 #include <windows.h>
 
@@ -33,6 +34,7 @@ struct Vec3 {
     }
     Vec3 operator/(double t) { return Vec3(x / t, y / t, z / t); }
     double length() { return sqrt(x * x + y * y + z * z); }
+    double length_squared() { return x * x + y * y + z * z; }
 };
 
 Vec3 operator*(double t, Vec3 vec) { return vec * t; }
@@ -68,6 +70,12 @@ struct Ray {
     Point3 at(double t) { return origin + t * direction; }
 };
 
+struct HitRecord {
+    Point3 p;
+    Vec3 normal;
+    double t;
+};
+
 struct Color {
     double r;
     double g;
@@ -97,29 +105,33 @@ double dot(Vec3 u, Vec3 v) { return u.x * v.x + u.y * v.y + u.z * v.z; }
 
 double hit_sphere(Point3 center, double radius, Ray r) {
     Vec3 oc = center - r.origin;
-    double a = dot(r.direction, r.direction);
-    double b = -2.0 * dot(r.direction, oc);
-    double c = dot(oc, oc) - radius * radius;
-    double discriminant = b * b - 4 * a * c;
+    double a = r.direction.length_squared();
+    double h = dot(r.direction, oc);
+    double c = oc.length_squared() - radius * radius;
+    double discriminant = h * h - a * c;
 
     if (discriminant < 0) {
         return -1.0;
     } else {
-        return (-b - sqrt(discriminant)) / (2.0 * a);
+        return (h - sqrt(discriminant)) / a;
     }
 }
 
 Color ray_color(Ray r) {
-
+    Vec3 light = Vec3(-1, -1, -1);
     double t = hit_sphere(Point3(0, 0, -1), 0.5, r);
     if (t > 0.0) {
         Vec3 N = unit_vector(r.at(t) - Vec3(0, 0, -1));
-        return 0.5 * Color(N.x + 1, N.y + 1, N.z + 1);
+
+        double d = fmax(dot(N, -1 * light), 0.0f);
+
+        return d * 0.5 * Color(0.7, 0.4, 0.3);
     }
 
-    Vec3 unit_direction = unit_vector(r.direction);
-    double a = 0.5 * (unit_direction.y + 1.0);
-    return (1.0 - a) * Color(1.0, 1.0, 1.0) + a * Color(0.5, 0.7, 1.0);
+    // Vec3 unit_direction = unit_vector(r.direction);
+    // double a = 0.5 * (unit_direction.y + 1.0);
+
+    return Color(0, 0, 0);
 }
 
 struct win32_offscreen_buffer {
@@ -146,22 +158,6 @@ win32_window_dimension Win32GetWindowDimension(HWND Window) {
     Result.Width = ClientRect.right - ClientRect.left;
     Result.Height = ClientRect.bottom - ClientRect.top;
     return Result;
-}
-
-internal void RenderRaytracer(win32_offscreen_buffer *Buffer) {
-    int Pitch = Buffer->Pitch;
-    uint8_t *Row = (uint8_t *)Buffer->Memory;
-    for (int Y = 0; Y < Buffer->Height; ++Y) {
-        uint32_t *Pixel = (uint32_t *)Row;
-        for (int X = 0; X < Buffer->Width; ++X) {
-
-            uint8_t Blue = X;
-            uint8_t Green = Y;
-
-            *Pixel++ = ((Green << 8) | Blue);
-        }
-        Row += Buffer->Pitch;
-    }
 }
 
 internal void Win32ResizeDIBSection(win32_offscreen_buffer *Buffer, int Width,
@@ -208,7 +204,7 @@ LRESULT MainWindowCallback(HWND WindowHandle, UINT Message, WPARAM wParam,
     case WM_KEYDOWN: {
         switch (wParam) {
         case VK_UP: {
-            
+
         } break;
         }
     } break;
@@ -250,7 +246,7 @@ int APIENTRY WinMain(HINSTANCE Instance, HINSTANCE PreviousInstance,
     wc.hInstance = Instance;
     wc.lpszClassName = (LPCSTR) "HandmadeHeroWindowClass";
 
-    double aspect_ratio = 16.0 / 9.0;
+    double aspect_ratio = (double(SCREEN_WIDTH) / SCREEN_HEIGHT);
 
     double viewport_height = 2.0;
     double viewport_width =
@@ -278,22 +274,23 @@ int APIENTRY WinMain(HINSTANCE Instance, HINSTANCE PreviousInstance,
 
         AdjustWindowRect(&Rect, Style, Menu);
 
-        HWND Window = CreateWindowA(wc.lpszClassName,
-                                    (LPCSTR) "Handmade Raycaster",
-                                    Style,
-                                    100,
-                                    100,
-                                    Rect.right - Rect.left,
-                                    Rect.bottom - Rect.top,
-                                    0, 0, Instance, 0);
+        HWND Window = CreateWindowA(
+            wc.lpszClassName, (LPCSTR) "Handmade Raycaster", Style, 100, 100,
+            Rect.right - Rect.left, Rect.bottom - Rect.top, 0, 0, Instance, 0);
 
         if (Window) {
             HDC DeviceContext = GetDC(Window);
+
+            // Create and populate world
+
 
             // Render Raytracer
 
             LARGE_INTEGER freq;
             QueryPerformanceFrequency(&freq);
+
+            LARGE_INTEGER start;
+            QueryPerformanceCounter(&start);
 
             {
                 int Pitch = GlobalBackBuffer.Pitch;
@@ -315,7 +312,12 @@ int APIENTRY WinMain(HINSTANCE Instance, HINSTANCE PreviousInstance,
                     Row += GlobalBackBuffer.Pitch;
                 }
             }
+            LARGE_INTEGER end;
+            QueryPerformanceCounter(&end);
 
+            std::clog << "Raytracing took: "
+                      << (double)(end.QuadPart - start.QuadPart) / freq.QuadPart
+                      << " seconds \n";
             while (Running) {
                 MSG Message;
                 while (PeekMessageA(&Message, 0, 0, 0, PM_REMOVE)) {
